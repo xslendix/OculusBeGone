@@ -17,18 +17,21 @@ if (-not (Test-Administrator)) {
 }
 
 # Kill OVRService service
-Stop-Process -Name OVRService -Force
+$ovr = Get-Process OVRServiceLauncher -ErrorAction SilentlyContinue
+if ($ovr) {
+    Stop-Process -Name OVRServiceLauncher -Force
+}
 
 # Detect oculus install directory
 oculus_dir=$(Get-ChildItem -Path "C:\Program Files\Oculus" | Where-Object {$_.Name -eq "Oculus"} | Select-Object -ExpandProperty Name)
 
 # Backup OculusDash.exe
 if (Test-Path -Path "C:\Program Files\Oculus\OculusDash.exe") {
-    $backup_dir = "C:\Program Files\Oculus\OculusDash.exe.backup"
-    if (!(Test-Path $backup_dir)) {
-        New-Item -Path $backup_dir
+    $backup_file = "C:\Program Files\Oculus\OculusDash.exe.backup"
+    if (!(Test-Path $backup_file)) {
+        New-Item -Path $backup_file
+        Copy-Item -Path "C:\Program Files\Oculus\OculusDash.exe" -Destination $backup_file
     }
-    Copy-Item -Path "C:\Program Files\Oculus\OculusDash.exe" -Destination $backup_dir
 }
 
 # Check if new OculusDash.exe exists in the same directory as the script
@@ -43,4 +46,6 @@ Write-Host 'Press any key to continue...';
 $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
 
 # Start OVRService service
-Start-Service "OVRService"
+if ($ovr) {
+    Start-Process OVRServiceLauncher -ArgumentList -start
+}
