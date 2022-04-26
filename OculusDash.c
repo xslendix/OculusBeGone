@@ -44,19 +44,19 @@ char*
 PickEXE()
 {
     char* file_name = malloc(MAX_PATH);
-    OPENFILENAME ofn;
-    ZeroMemory(&ofn, sizeof(ofn));
-    ofn.lStructSize = sizeof(ofn);
-    ofn.hwndOwner = NULL;
-    ofn.lpstrFile = file_name;
+    OPENFILENAME ofn = {
+        .lStructSize = sizeof(ofn),
+        .hwndOwner = NULL,
+        .lpstrFile = file_name,
+        .nMaxFile = MAX_PATH,
+        .lpstrFilter = "Executable Files\0*.exe\0All Files\0*.*\0",
+        .nFilterIndex = 1,
+        .lpstrFileTitle = NULL,
+        .nMaxFileTitle = 0,
+        .lpstrInitialDir = NULL,
+        .Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST,
+    };
     ofn.lpstrFile[0] = '\0';
-    ofn.nMaxFile = MAX_PATH;
-    ofn.lpstrFilter = "Executable Files\0*.exe\0All Files\0*.*\0";
-    ofn.nFilterIndex = 1;
-    ofn.lpstrFileTitle = NULL;
-    ofn.nMaxFileTitle = 0;
-    ofn.lpstrInitialDir = NULL;
-    ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
 
     if (GetOpenFileName(&ofn) == TRUE) {
         return file_name;
@@ -65,8 +65,8 @@ PickEXE()
     }
 }
 
-bool
-FileExists(const char* path)
+static inline bool
+FileValid(const char* path)
 {
     DWORD attrib = GetFileAttributes(path);
     return (attrib != INVALID_FILE_ATTRIBUTES);
@@ -82,11 +82,14 @@ main(void)
     if (steam_path != NULL) {
         steamvr = strccat(steam_path, "\\steamapps\\common\\SteamVR\\bin\\win64\\vrstartup.exe");
 
-        if (GetFileAttributes(steamvr) != INVALID_FILE_ATTRIBUTES) {
+        if (FileValid(steamvr)) {
             steamvr_found = TRUE;
         }
 
         free(steam_path);
+    } else {
+        MessageBox(NULL, "Steam not found.\nPlease install Steam and try again.", "Error", MB_OK | MB_ICONERROR);
+        return 1;
     }
     
     if (!steamvr_found) {
@@ -94,14 +97,17 @@ main(void)
         free(steamvr);
         steamvr = GetRegVal(HKEY_CURRENT_USER, "SOFTWARE\\Valve\\SteamVR", "SteamVRPath");
         if (steamvr != NULL) {
-            if (GetFileAttributes(steamvr) != INVALID_FILE_ATTRIBUTES && strstr(steamvr, "vrstartup.exe") != NULL) {
+            if (FileValid(steamvr) && strstr(steamvr, "vrstartup.exe") != NULL) {
                 steamvr_found = TRUE;
+                puts("Found manually picked SteamVR. Using that.");
             }
         }
     }
 
     if (!steamvr_found) {
-        MessageBox(NULL, "It seems that we couldn't automatically find a SteamVR installation. Please select it manually. You shouldn't be prompted again.\nThe file you are looking for should be in steamapps\\common\\SteamVR\\bin\\win64\\vrstartup.exe", "Uh oh!", MB_OK);
+        puts("Automatic SteamVR installation failed. Prompting user for install location.");
+        MessageBox(NULL, "It seems that we couldn't automatically find a SteamVR installation. Please select it manually. You shouldn't be prompted again.\n\n"
+                         "The file you are looking for should be in steamapps\\common\\SteamVR\\bin\\win64\\vrstartup.exe", "Uh oh!", MB_OK);
 
         steamvr = PickEXE();
         if (strstr(steamvr, "vrstartup.exe") == NULL) {
@@ -110,6 +116,7 @@ main(void)
             return 1;
         }
 
+        puts("Saving location to registry.");
         HKEY key;
         LONG result = RegCreateKeyEx(HKEY_CURRENT_USER, "SOFTWARE\\Valve\\SteamVR", 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &key, NULL);
         if (result != ERROR_SUCCESS) {
@@ -124,13 +131,15 @@ main(void)
         RegCloseKey(key);
     }
 
-    if (!FileExists(steamvr)) {
-        MessageBox(NULL, "The SteamVR executable path seems to be invalid. Exiting.", "Uh oh!", MB_OK);
+    if (!FileValid(steamvr)) {
+        MessageBox(NULL, "The SteamVR executable path seems to be invalid. Manual intervention may be required. Exiting.", "Uh oh!", MB_OK);
+        puts("Somehow, the SteamVR path is invalid. Manual intervention may be required.");
         free(steamvr);
         return 1;
     }
 
     printf("SteamVR path: %s\n", steamvr);
+    puts("Starting SteamVR.");
 
     // Start it and wait for it to exit
     STARTUPINFO si;
@@ -146,6 +155,8 @@ main(void)
     }
 
     WaitForSingleObject(pi.hProcess, INFINITE);
+
+    puts("SteamVR exited.");
 
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
