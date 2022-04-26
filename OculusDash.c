@@ -1,11 +1,8 @@
 #include <stdio.h>
-#include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
 
 #include <windows.h>
-#include <winuser.h>
-#include <commdlg.h>
 
 char*
 strccat(char* s1, char* s2)
